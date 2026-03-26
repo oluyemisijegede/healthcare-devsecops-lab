@@ -1,0 +1,268 @@
+name: MediTrack DevSecOps Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  IMAGE_NAME: meditrack-api
+  K8S_NAMESPACE: meditrack
+  EKS_CLUSTER: migration-eks-cluster
+  AWS_REGION: us-east-1
+
+jobs:
+  # ──────────────────────────────────────────────────────────
+  # Stage 1: Unit Tests
+  # ──────────────────────────────────────────────────────────
+  test:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: ./app
+        run: npm ci
+
+      - name: Run linter
+        working-directory: ./app
+        run: npm run lint --if-present
+
+      - name: Run tests with coverage
+        working-directory: ./app
+        run: npm test
+
+  # ──────────────────────────────────────────────────────────
+  # Stage 2: Dependency Audit
+  # Checks node_modules for known CVEs using npm's built-in
+  # vulnerability database.
+  # ──────────────────────────────────────────────────────────
+  dependency-audit:
+    name: Dependency Audit (npm audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Install dependencies
+        working-directory: ./app
+        run: npm ci
+
+      - name: Run npm audit
+        working-directory: ./app
+        run: npm audit --audit-level=high
+
+  # ──────────────────────────────────────────────────────────
+  # Stage 3: Secret Detection
+  # Scans the entire repository history for accidentally
+  # committed secrets (API keys, passwords, tokens).
+  # ──────────────────────────────────────────────────────────
+  secret-detection:
+    name: Secret Detection (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+  # ──────────────────────────────────────────────────────────
+  # Stage 4: Static Analysis (SAST)
+  # CodeQL analyzes source code for security vulnerabilities
+  # such as SQL injection, XSS, and hardcoded credentials.
+  # ──────────────────────────────────────────────────────────
+  codeql-analysis:
+    name: Static Analysis (CodeQL)
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+
+      - name: Run CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:javascript"
+
+  # ──────────────────────────────────────────────────────────
+  # Stage 5: Container Image Scan
+  # Trivy scans the built Docker image for OS-level and
+  # library vulnerabilities. Blocks on CRITICAL and HIGH.
+  # ──────────────────────────────────────────────────────────
+  container-scan:
+    name: Container Scan (Trivy)
+    runs-on: ubuntu-latest
+    needs: [test, dependency-audit]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image for scanning
+        run: docker build -t ${{ env.IMAGE_NAME }}:scan -f docker/Dockerfile .
+
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.IMAGE_NAME }}:scan'
+          format: 'table'
+          exit-code: '1'
+          severity: 'CRITICAL,HIGH'
+          ignore-unfixed: true
+
+  # ──────────────────────────────────────────────────────────
+  # Stage 6: SBOM Generation
+  # Syft generates a Software Bill of Materials listing every
+  # package in the container. Required for healthcare and
+  # supply chain compliance.
+  # ──────────────────────────────────────────────────────────
+  sbom:
+    name: SBOM Generation (Syft)
+    runs-on: ubuntu-latest
+    needs: container-scan
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build -t ${{ env.IMAGE_NAME }}:sbom -f docker/Dockerfile .
+
+      - name: Generate SBOM with Syft
+        uses: anchore/sbom-action@v0
+        with:
+          image: '${{ env.IMAGE_NAME }}:sbom'
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.spdx.json
+
+  # ──────────────────────────────────────────────────────────
+  # Stage 7: Kubernetes Policy Check
+  # OPA/Conftest validates Kubernetes manifests against
+  # security policies (non-root, resource limits, probes,
+  # no :latest tag, no privilege escalation).
+  # ──────────────────────────────────────────────────────────
+  k8s-policy-check:
+    name: K8s Policy Check (OPA/Conftest)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Conftest
+        run: |
+          LATEST=$(wget -qO- "https://api.github.com/repos/open-policy-agent/conftest/releases/latest" | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+          wget -q "https://github.com/open-policy-agent/conftest/releases/download/v${LATEST}/conftest_${LATEST}_Linux_x86_64.tar.gz"
+          tar xzf conftest_${LATEST}_Linux_x86_64.tar.gz
+          sudo mv conftest /usr/local/bin/
+
+      - name: Validate Kubernetes manifests
+        run: |
+          echo "=== Checking deployment.yaml ==="
+          conftest test kubernetes/deployment.yaml -p policies/
+          echo ""
+          echo "=== Checking namespace.yaml ==="
+          conftest test kubernetes/namespace.yaml -p policies/
+
+  # ──────────────────────────────────────────────────────────
+  # Build and Push — only runs if ALL security checks pass
+  # ──────────────────────────────────────────────────────────
+  build-and-push:
+    name: Build and Push Image
+    runs-on: ubuntu-latest
+    needs: [test, dependency-audit, secret-detection, codeql-analysis, container-scan, sbom, k8s-policy-check]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: true
+          tags: |
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+            ${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+
+  # ──────────────────────────────────────────────────────────
+  # Deploy — only runs after a successful, secure build
+  # ──────────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to EKS
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Update kubeconfig
+        run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER }}
+
+      - name: Deploy to Kubernetes
+        run: |
+          kubectl apply -f kubernetes/namespace.yaml
+          kubectl apply -f kubernetes/configmap.yaml
+          kubectl apply -f kubernetes/deployment.yaml
+          kubectl apply -f kubernetes/service.yaml
+          kubectl apply -f kubernetes/servicemonitor.yaml
+
+      - name: Update deployment image
+        run: |
+          kubectl set image deployment/meditrack-api \
+            meditrack-api=${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.sha }} \
+            -n ${{ env.K8S_NAMESPACE }}
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/meditrack-api -n ${{ env.K8S_NAMESPACE }} --timeout=120s
+
+      - name: Verify deployment
+        run: |
+          echo "--- Pods ---"
+          kubectl get pods -n ${{ env.K8S_NAMESPACE }}
+          echo "--- Service ---"
+          kubectl get svc -n ${{ env.K8S_NAMESPACE }}

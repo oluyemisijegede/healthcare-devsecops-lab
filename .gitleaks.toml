@@ -1,0 +1,12 @@
+# Gitleaks configuration for MediTrack
+# See https://github.com/gitleaks/gitleaks for documentation
+
+title = "MediTrack Gitleaks Config"
+
+[allowlist]
+  description = "Global allowlist"
+  paths = [
+    '''node_modules''',
+    '''\.git''',
+    '''coverage''',
+  ]

@@ -1,0 +1,19 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: meditrack-monitor
+  namespace: meditrack
+  labels:
+    app: meditrack
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: meditrack
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+  namespaceSelector:
+    matchNames:
+      - meditrack

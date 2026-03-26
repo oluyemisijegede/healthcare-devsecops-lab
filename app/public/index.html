@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MediTrack — Patient Appointment System</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f0f4f8; color: #1a202c; }
+    header { background: linear-gradient(135deg, #2b6cb0, #2c5282); color: white; padding: 2rem; text-align: center; }
+    header h1 { font-size: 2rem; margin-bottom: 0.25rem; }
+    header p { opacity: 0.85; font-size: 1rem; }
+    .container { max-width: 1000px; margin: 2rem auto; padding: 0 1rem; }
+    .card { background: white; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 1.5rem; margin-bottom: 1.5rem; }
+    .card h2 { font-size: 1.25rem; color: #2b6cb0; margin-bottom: 1rem; border-bottom: 2px solid #e2e8f0; padding-bottom: 0.5rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th { background: #edf2f7; text-align: left; padding: 0.75rem; font-weight: 600; }
+    td { padding: 0.75rem; border-bottom: 1px solid #e2e8f0; }
+    tr:hover { background: #f7fafc; }
+    .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+    .badge-scheduled { background: #bee3f8; color: #2a4365; }
+    .badge-confirmed { background: #c6f6d5; color: #22543d; }
+    .badge-cancelled { background: #fed7d7; color: #742a2a; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1.5rem; }
+    .stat { background: white; border-radius: 12px; padding: 1.25rem; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+    .stat .number { font-size: 2rem; font-weight: 700; color: #2b6cb0; }
+    .stat .label { color: #718096; font-size: 0.85rem; margin-top: 0.25rem; }
+    .btn { padding: 0.5rem 1rem; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+    .btn-primary { background: #2b6cb0; color: white; }
+    .btn-primary:hover { background: #2c5282; }
+    footer { text-align: center; padding: 2rem; color: #a0aec0; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>MediTrack</h1>
+    <p>Patient Appointment Management System</p>
+  </header>
+
+  <div class="container">
+    <div class="stats">
+      <div class="stat"><div class="number" id="patientCount">-</div><div class="label">Registered Patients</div></div>
+      <div class="stat"><div class="number" id="apptCount">-</div><div class="label">Appointments</div></div>
+      <div class="stat"><div class="number" id="todayCount">-</div><div class="label">Today's Appointments</div></div>
+      <div class="stat"><div class="number" id="serverHost">-</div><div class="label">Served By</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Upcoming Appointments</h2>
+      <table>
+        <thead><tr><th>Patient</th><th>Provider</th><th>Department</th><th>Date</th><th>Time</th><th>Type</th><th>Status</th></tr></thead>
+        <tbody id="apptTable"><tr><td colspan="7">Loading...</td></tr></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>Registered Patients</h2>
+      <table>
+        <thead><tr><th>Name</th><th>Date of Birth</th><th>Email</th><th>Phone</th><th>Insurance ID</th></tr></thead>
+        <tbody id="patientTable"><tr><td colspan="5">Loading...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>MediTrack v1.0 &mdash; Healthcare Appointment System</footer>
+
+  <script>
+    async function load() {
+      try {
+        const [pRes, aRes, hRes] = await Promise.all([
+          fetch('/api/patients'),
+          fetch('/api/appointments'),
+          fetch('/health'),
+        ]);
+        const patients = await pRes.json();
+        const appts = await aRes.json();
+        const health = await hRes.json();
+        const today = new Date().toISOString().split('T')[0];
+
+        document.getElementById('patientCount').textContent = patients.count;
+        document.getElementById('apptCount').textContent = appts.count;
+        document.getElementById('todayCount').textContent = appts.appointments.filter(a => a.date === today).length;
+        document.getElementById('serverHost').textContent = health.version;
+
+        document.getElementById('apptTable').innerHTML = appts.appointments.map(a =>
+          `<tr><td>${a.patientName}</td><td>${a.provider}</td><td>${a.department}</td><td>${a.date}</td><td>${a.time}</td><td>${a.type}</td><td><span class="badge badge-${a.status}">${a.status}</span></td></tr>`
+        ).join('');
+
+        document.getElementById('patientTable').innerHTML = patients.patients.map(p =>
+          `<tr><td>${p.firstName} ${p.lastName}</td><td>${p.dob}</td><td>${p.email || '—'}</td><td>${p.phone || '—'}</td><td>${p.insuranceId || '—'}</td></tr>`
+        ).join('');
+      } catch (err) {
+        console.error('Failed to load data:', err);
+      }
+    }
+    load();
+  </script>
+</body>
+</html>

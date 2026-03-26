@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: meditrack
+  labels:
+    app: meditrack
+    environment: production
