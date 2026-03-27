@@ -101,13 +101,17 @@ You need a free [SonarCloud](https://sonarcloud.io) account:
 3. Import your forked repository
 ![image](image-2.png)
 ![image](image-3.png)
-4. Copy the **organization** and **project key** from the SonarCloud dashboard
+4. **Disable Automatic Analysis** — SonarCloud enables this by default, but it conflicts with our CI-based pipeline analysis. If you skip this step, the pipeline will fail with: *"You are running CI analysis while Automatic Analysis is enabled."*
+   - Inside your project on SonarCloud, go to **Administration** (bottom of the left sidebar) > **Analysis Method**
+   - Turn **off** the "Automatic Analysis" toggle
+   - This tells SonarCloud to only analyze code when our GitHub Actions pipeline sends it, not on its own schedule
+5. Copy the **organization** and **project key** from the SonarCloud dashboard
 ![image](image-5.png)
-5. Update `sonar-project.properties` with your organization and project key
+6. Update `sonar-project.properties` with your organization and project key
 ![image](image-6.png)
-6. In SonarCloud, go to **My Account** > **Security** > generate a token
+7. In SonarCloud, go to **My Account** > **Security** > generate a token
 ![image](image-7.png)
-7. Add that token as `SONAR_TOKEN` in your GitHub repository secrets
+8. Add that token as `SONAR_TOKEN` in your GitHub repository secrets
 ![image](image-8.png)
 
 ### 5. Tools
@@ -166,7 +170,7 @@ In your forked repository, go to **Settings** > **Secrets and variables** > **Ac
 | `DOCKER_PASSWORD` | Your DockerHub password |
 | `AWS_ACCESS_KEY_ID` | Your IAM user access key ID |
 | `AWS_SECRET_ACCESS_KEY` | Your IAM user secret access key |
-| `SONAR_TOKEN` | Your SonarCloud token (from Prerequisites step 4) |
+| `SONAR_TOKEN` | Your SonarCloud token (from Prerequisites step 4, substep 7) |
 ![image](image-9.png)
 
 > **Note:** `GITLEAKS_LICENSE` is optional. Gitleaks works without a license key on public repositories. For private repos, get a free license at [gitleaks.io](https://gitleaks.io).
