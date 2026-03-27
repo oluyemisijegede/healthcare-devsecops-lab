@@ -24,7 +24,7 @@ spec:
         - name: meditrack-api
           # TODO: Replace <your-dockerhub-username> with your DockerHub username
           # The pipeline will update this to use the commit SHA (e.g., :abc123)
-          image: lincontech/meditrack-api:${IMAGE_TAG}     #v1.0.0
+          image: lincontech/meditrack-api:<commit-sha>     #v1.0.0
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
