@@ -133,16 +133,7 @@ git clone https://github.com/<your-username>/healthcare-devsecops-lab.git
 cd healthcare-devsecops-lab
 ```
 
-### Step 2 — Update the Docker Image Reference
-
-Edit `kubernetes/deployment.yaml` and replace the image placeholder with your DockerHub username:
-
-```yaml
-image: <your-dockerhub-username>/meditrack-api:latest
-```
-![image](image-4.png)
-
-### Step 3 — Update SonarCloud Configuration
+### Step 2 — Update SonarCloud Configuration
 
 Edit `sonar-project.properties` and replace the placeholders:
 
@@ -152,15 +143,17 @@ sonar.projectKey=<your-sonarcloud-project-key>
 ```
 ![image](image-6.png)
 
+> **Note:** You do **not** need to edit the image in `kubernetes/deployment.yaml`. The pipeline automatically substitutes the `<your-dockerhub-username>` placeholder with your `DOCKER_USERNAME` secret and the commit SHA at deploy time.
+
 Commit and push:
 
 ```bash
-git add kubernetes/deployment.yaml sonar-project.properties
-git commit -m "Update Docker image and SonarCloud config"
+git add sonar-project.properties
+git commit -m "Update SonarCloud config"
 git push origin main
 ```
 
-### Step 4 — Configure GitHub Secrets
+### Step 3 — Configure GitHub Secrets
 
 In your forked repository, go to **Settings** > **Secrets and variables** > **Actions** and add:
 
@@ -170,14 +163,14 @@ In your forked repository, go to **Settings** > **Secrets and variables** > **Ac
 | `DOCKER_PASSWORD` | Your DockerHub password |
 | `AWS_ACCESS_KEY_ID` | Your IAM user access key ID |
 | `AWS_SECRET_ACCESS_KEY` | Your IAM user secret access key |
-| `SONAR_TOKEN` | Your SonarCloud token (from Prerequisites step 4, substep 7) |
+| `SONAR_TOKEN` | Your SonarCloud token (from Prerequisites step 4) |
 ![image](image-9.png)
 
 > **Note:** `GITLEAKS_LICENSE` is optional. Gitleaks works without a license key on public repositories. For private repos, get a free license at [gitleaks.io](https://gitleaks.io).
 
-### Step 5 — Watch the Pipeline Run
+### Step 4 — Watch the Pipeline Run
 
-The push in Step 3 triggers the pipeline. Go to the **Actions** tab and watch all 7 stages:
+The push in Step 2 triggers the pipeline. Go to the **Actions** tab and watch all 7 stages:
 
 1. **Unit Tests** -- Runs the automated test suite to make sure the application works correctly (e.g., "does the patient registration endpoint actually create a patient?")
 2. **Secret Detection** -- Scans every commit ever made to the repository looking for accidentally committed passwords, API keys, or tokens. Even if someone deleted the secret in a later commit, it's still in the git history.
@@ -189,7 +182,7 @@ The push in Step 3 triggers the pipeline. Go to the **Actions** tab and watch al
 
 > **Note:** The first run takes approximately 5-8 minutes.
 
-### Step 6 — Explore the SonarCloud Dashboard
+### Step 5 — Explore the SonarCloud Dashboard
 
 After the pipeline completes:
 
@@ -206,13 +199,13 @@ After the pipeline completes:
 
 > **SonarCloud will flag issues in `app/vulnerabilities/insecure-example.js`** -- this is intentional! Those vulnerabilities are there for learning purposes. In a real project, you would fix them before merging.
 
-### Step 7 — Explore the Security Results
+### Step 6 — Explore the Security Results
 
 **Trivy scan results (vulnerabilities in the container image):**
 1. In the workflow run, click the **Container Scan (Trivy)** job
 2. Review the vulnerability table -- each row shows a CVE ID (a unique identifier for the vulnerability), which package is affected, the current version, the fixed version, and the severity level (CRITICAL, HIGH, MEDIUM, LOW). The pipeline blocks deployment if any CRITICAL or HIGH issues are found.
 
-### Step 8 — Understand the Vulnerability Examples
+### Step 7 — Understand the Vulnerability Examples
 
 Review the two files in `app/vulnerabilities/`:
 
@@ -223,7 +216,7 @@ Review the two files in `app/vulnerabilities/`:
 
 These files demonstrate common security mistakes that SonarCloud and code review should catch. In a real healthcare application, any of these could lead to a data breach or HIPAA violation.
 
-### Step 9 — Understand the OPA Policies
+### Step 8 — Understand the OPA Policies
 
 Review the files in `policies/`. These are written in a language called **Rego** (pronounced "ray-go"), which is used by OPA (Open Policy Agent) to define rules. You don't need to master Rego -- just understand what each rule checks and why it matters.
 
@@ -260,7 +253,7 @@ conftest test kubernetes/deployment.yaml -p policies/
 # Output: FAIL - Container 'meditrack-api' must define a readinessProbe
 ```
 
-### Step 10 — Verify the Deployment
+### Step 9 — Verify the Deployment
 
 ```bash
 kubectl get pods -n meditrack
@@ -279,7 +272,7 @@ curl http://<EXTERNAL-IP>/api/patients
 curl http://<EXTERNAL-IP>/metrics
 ```
 
-### Step 11 — Break and Fix the Pipeline (Challenge)
+### Step 10 — Break and Fix the Pipeline (Challenge)
 
 Try introducing a security issue and watch the pipeline catch it:
 
