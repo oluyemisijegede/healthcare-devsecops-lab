@@ -4,7 +4,6 @@ A hands-on DevSecOps lab that embeds security into every stage of a CI/CD pipeli
 
 ## Scenario
 ## Triggering a workflow run
-## A new secOps run again
 
 You are a DevOps engineer at **MediTrack Health**. The development team shipped a working CI/CD pipeline (from the previous lab), but the security team has flagged it -- the pipeline has no security checks. In healthcare, this is a compliance risk. Patient data is involved, and regulators expect evidence that code and infrastructure are scanned before reaching production.
 
