@@ -6,6 +6,9 @@ const router = express.Router();
 // In-memory store (replaced by a database in production)
 const patients = new Map();
 
+// Hardcoding DB Password
+const DB_PASSWORD = 'patient-db-secret-123';
+
 // Seed sample data
 const seedPatients = [
   { id: uuidv4(), firstName: 'Sarah', lastName: 'Johnson', dob: '1985-03-15', email: 'sarah.johnson@email.com', phone: '555-0101', insuranceId: 'INS-10234', createdAt: new Date().toISOString() },
