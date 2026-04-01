@@ -32,6 +32,9 @@ jobs:
         working-directory: ./app
         run: npm ci
 
+      - name: Run Trivy scan
+        run: trivy image --exit-code 1 --severity CRITICAL $IMAGE_NAME
+
       - name: Run linter
         working-directory: ./app
         run: npm run lint --if-present
